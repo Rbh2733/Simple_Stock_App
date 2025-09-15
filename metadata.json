@@ -1,0 +1,5 @@
+{
+  "name": "Stock Forecaster AI",
+  "description": "An example app that provides AI-powered stock analysis using Gemini.",
+  "requestFramePermissions": []
+}

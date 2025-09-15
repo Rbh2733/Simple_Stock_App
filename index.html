@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Stock Forecaster AI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="index.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/genai": "https://esm.sh/@google/genai@^0.7.0",
+          "marked": "https://esm.sh/marked@^15.0.7"
+        }
+      }
+    </script>
+    <script type="module" src="index.tsx"></script>
+  </head>
+  <body>
+    <main id="chat-container">
+      <header class="app-header">
+        <h1>Stock Forecaster AI</h1>
+        <button id="clear-button">Clear</button>
+      </header>
+      <div id="chat-history"></div>
+      <form id="chat-form">
+        <input
+          id="prompt-input"
+          type="text"
+          placeholder="Enter a stock ticker..."
+          aria-label="Stock ticker input"
+          required
+        />
+        <button type="submit" aria-label="Send message">Send</button>
+      </form>
+    </main>
+  </body>
+</html>
