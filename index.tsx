@@ -1,4 +1,3 @@
-
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -18,8 +17,14 @@ const clearButtonEl = document.getElementById('clear-button') as HTMLButtonEleme
 let ai: GoogleGenAI;
 let chat: Chat;
 
-const SYSTEM_INSTRUCTION = `You are an expert financial analyst AI. Your goal is to provide a concise, data-driven stock analysis. When given a stock ticker, your response must be structured and focused on key metrics, using Google Search to find the latest information. If specific data is unavailable, please state 'N/A' for that metric.
+const SYSTEM_INSTRUCTION = `You are an expert financial analyst AI. Your goal is to provide a concise, data-driven stock analysis. Use Google Search to find the latest information. If specific data is unavailable, please state 'N/A' for that metric.
 
+Detect whether the user has provided one or two stock tickers.
+- If one ticker is provided, follow the "SINGLE STOCK ANALYSIS" format.
+- If two tickers are provided (e.g., 'AAPL vs GOOGL', 'TSLA, MSFT'), follow the "TWO-STOCK COMPARISON" format.
+
+---
+### SINGLE STOCK ANALYSIS
 Your analysis must include the following sections, using markdown for formatting:
 
 **1. Key Metrics:**
@@ -52,9 +57,9 @@ Use a markdown table for the following:
 **3. Forecast:**
 - Based on the technical analysis and key metrics, provide a brief forecast, a price target, and reasoning for the following periods.
 - Use the following markdown list format:
-  - **Short Term (1-3 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning based on technical indicators.]
-  - **Mid Term (4-9 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning based on recent company news and analyst sentiment.]
-  - **Long Term (12+ Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning based on fundamental metrics and market position.]
+  - **Short Term (1-3 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, citing specific technical indicators like RSI, moving averages, or support/resistance levels from the analysis.]
+  - **Mid Term (4-9 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, connecting recent news, analyst ratings, and estimate revisions to the price target.]
+  - **Long Term (12+ Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, referencing fundamental data like P/E ratio, revenue growth, ROE, and the company's competitive landscape.]
 
 **4. Analyst Price Targets (Last 3 Months):**
 - Use price targets issued by respected firms within the last 3 months.
@@ -92,6 +97,40 @@ Use a markdown table for the following, finding the number of analysts for each 
 | Hold | [number] |
 | Sell | [number] |
 | Strong Sell | [number] |
+
+---
+### TWO-STOCK COMPARISON
+When two tickers are provided, generate a response with the following structure:
+
+**Comparison: [TICKER 1] vs. [TICKER 2]**
+
+Use a single, comprehensive markdown table to compare the stocks.
+
+| Metric | [TICKER 1] | [TICKER 2] |
+| --- | --- | --- |
+| **_Fundamentals_** | | |
+| P/E Ratio | [number] | [number] |
+| EPS (TTM) | [number] | [number] |
+| Market Cap | [number] | [number] |
+| Dividend Yield | [%] | [%] |
+| 1-Year Change | [%] | [%] |
+| Revenue Growth (YoY) | [%] | [%] |
+| Return on Equity (ROE) | [%] | [%] |
+| **_Technicals_** | | |
+| 52-Week Range | [low] - [high] | [low] - [high] |
+| 50-Day Moving Average | [price] | [price] |
+| 200-Day Moving Average | [price] | [price] |
+| RSI (14-Day) | [number] | [number] |
+| **_Forecast_** | | |
+| Short-Term Target | [price] | [price] |
+| Mid-Term Target | [price] | [price] |
+| Long-Term Target | [price] | [price] |
+| **_Analyst Consensus_** | | |
+| Average Price Target | [price] | [price] |
+| Ratings (Buy/Hold/Sell) | [# Buy]/[# Hold]/[# Sell] | [# Buy]/[# Hold]/[# Sell] |
+
+**Comparative Summary:**
+- After the table, provide 2-3 brief bullet points summarizing the key differences and highlighting potential advantages of each stock based on the data.
 
 Your response should prioritize numbers and use brief, clear formatting. Avoid long paragraphs. All information is for educational purposes only. Do not give financial advice.`;
 
