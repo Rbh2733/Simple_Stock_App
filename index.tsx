@@ -37,6 +37,8 @@ let searchHistory: string[] = [];
 let favorites: string[] = [];
 const trackedTickers = new Map<string, number>();
 let priceUpdateInterval: number | null = null;
+let updateQueue: string[] = [];
+let isUpdatingPriceLoop = false;
 
 const SYSTEM_INSTRUCTION = `You are an expert financial analyst AI. Your goal is to provide a concise, data-driven stock analysis. Use Google Search to find the latest information. If specific data is unavailable, please state 'N/A' for that metric.
 
@@ -853,49 +855,109 @@ function updateMarketStatusUI() {
 }
 
 /**
- * Fetches mock prices and dispatches a message event.
+ * Fetches the latest stock price for a given ticker using the AI model.
+ * @param ticker The stock ticker symbol.
+ * @returns The price as a number, or null if it fails.
  */
-function fetchTickerPrices() {
-  if (trackedTickers.size === 0) return;
-
-  const updates = Array.from(trackedTickers.keys()).map((ticker) => {
-    const oldPrice = trackedTickers.get(ticker) || (Math.random() * 500 + 50);
-    let newPrice = oldPrice;
-    if (isMarketOpen()) {
-      const changePercent = (Math.random() - 0.49) * 0.05; // Small random change
-      newPrice = oldPrice * (1 + changePercent);
+async function fetchRealPrice(ticker: string): Promise<number | null> {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `What is the most recent stock price for ${ticker}? Please provide only the numerical value, for example: 123.45`,
+      config: {
+        tools: [{ googleSearch: {} }],
+        // Disable thinking for a faster, more direct response for this simple query.
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
+    // The response might contain '$' or other text. Clean it up.
+    const priceText = response.text.trim().replace(/[^0-9.]/g, '');
+    const price = parseFloat(priceText);
+    if (isNaN(price) || price === 0) {
+      console.warn(
+        `Could not parse a valid price for ${ticker} from response: "${response.text}"`
+      );
+      return null;
     }
-    trackedTickers.set(ticker, newPrice);
-    return { ticker, price: newPrice };
-  });
-
-  // Simulate receiving a message from a WebSocket
-  const event = new MessageEvent('message', {
-    data: JSON.stringify(updates),
-  });
-  window.dispatchEvent(event);
+    return price;
+  } catch (error) {
+    console.error(`Failed to fetch price for ${ticker}:`, error);
+    return null;
+  }
 }
 
+/**
+ * The main loop for updating ticker prices one by one when the market is open.
+ * This spaces out API calls to avoid rate limiting.
+ */
+async function priceUpdateLoop() {
+  if (isUpdatingPriceLoop || !isMarketOpen()) {
+    return;
+  }
+
+  // If the queue is empty, repopulate it with all tracked tickers for the next cycle.
+  if (updateQueue.length === 0 && trackedTickers.size > 0) {
+    updateQueue = Array.from(trackedTickers.keys());
+  }
+
+  if (updateQueue.length === 0) {
+    return; // Nothing to update
+  }
+
+  isUpdatingPriceLoop = true;
+  const ticker = updateQueue.shift();
+
+  if (ticker) {
+    const price = await fetchRealPrice(ticker);
+    if (price !== null) {
+      trackedTickers.set(ticker, price);
+      // Dispatch an event to update the UI, mimicking a WebSocket message
+      const event = new MessageEvent('message', {
+        data: JSON.stringify([{ ticker, price }]),
+      });
+      window.dispatchEvent(event);
+    }
+  }
+
+  isUpdatingPriceLoop = false;
+  // Schedule the next update. The delay creates a polling effect.
+  setTimeout(priceUpdateLoop, 3000); // 3-second delay between each ticker update
+}
+
+/**
+ * Fetches the latest closing price for all tracked tickers.
+ * Used when the market is closed or for a manual refresh.
+ */
+async function fetchAllTrackedPrices() {
+  const tickers = Array.from(trackedTickers.keys());
+  for (const ticker of tickers) {
+    const price = await fetchRealPrice(ticker);
+    if (price !== null) {
+      trackedTickers.set(ticker, price);
+      const event = new MessageEvent('message', {
+        data: JSON.stringify([{ ticker, price }]),
+      });
+      window.dispatchEvent(event);
+    }
+    // Add a small delay between requests
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
 
 /**
  * Manages the automatic ticker price updates based on market hours.
  */
 function manageTickerUpdates() {
-  // Clear any existing interval
-  if (priceUpdateInterval) {
-    clearInterval(priceUpdateInterval);
-    priceUpdateInterval = null;
-  }
-  
   updateMarketStatusUI();
-  
+
   if (isMarketOpen()) {
-    // If market is open, start auto-updates
-    fetchTickerPrices(); // Fetch immediately
-    priceUpdateInterval = window.setInterval(fetchTickerPrices, 3000); // Update every 3 seconds
+    // If market is open, start the continuous update loop
+    priceUpdateLoop();
   } else {
-    // If market is closed, just fetch the latest closing price once
-    fetchTickerPrices();
+    // If market is closed, just fetch the latest closing price once for any existing tickers
+    if (trackedTickers.size > 0) {
+      fetchAllTrackedPrices();
+    }
   }
 }
 
@@ -928,10 +990,12 @@ function handleWebSocketMessage(event: MessageEvent) {
 
         // Add visual feedback for price change
         let priceClass = '';
-        if (newPrice > oldPrice) {
-          priceClass = 'price-up';
-        } else if (newPrice < oldPrice) {
-          priceClass = 'price-down';
+        if (!isNaN(oldPrice) && oldPrice > 0) {
+          if (newPrice > oldPrice) {
+            priceClass = 'price-up';
+          } else if (newPrice < oldPrice) {
+            priceClass = 'price-down';
+          }
         }
 
         if (priceClass) {
@@ -954,18 +1018,18 @@ function handleWebSocketMessage(event: MessageEvent) {
  * Adds a ticker to the real-time tracking tape.
  * @param ticker The stock ticker symbol to add.
  */
-function addTickerToTape(ticker: string) {
+async function addTickerToTape(ticker: string) {
   if (trackedTickers.has(ticker)) return;
 
-  const initialPrice = Math.random() * 500 + 50; // Assign a random starting price
-  trackedTickers.set(ticker, initialPrice);
+  // Add to map with a placeholder to prevent re-adding during async fetch
+  trackedTickers.set(ticker, -1);
 
   const tickerItem = document.createElement('div');
   tickerItem.className = 'ticker-item';
   tickerItem.id = `ticker-${ticker}`;
   tickerItem.innerHTML = `
     <span class="ticker-symbol">${ticker}</span>
-    <span class="ticker-price">$${initialPrice.toFixed(2)}</span>
+    <span class="ticker-price">Loading...</span>
   `;
 
   if (tickerTapeEl.firstChild) {
@@ -973,9 +1037,30 @@ function addTickerToTape(ticker: string) {
   } else {
     tickerTapeEl.appendChild(tickerItem);
   }
-  
-  // After adding a new ticker, fetch prices immediately
-  fetchTickerPrices();
+
+  const price = await fetchRealPrice(ticker);
+
+  if (price !== null) {
+    trackedTickers.set(ticker, price);
+    const event = new MessageEvent('message', {
+      data: JSON.stringify([{ ticker, price }]),
+    });
+    window.dispatchEvent(event);
+
+    // If the market is open, add the new ticker to the update queue
+    if (isMarketOpen() && !updateQueue.includes(ticker)) {
+      updateQueue.push(ticker);
+      // Ensure the loop is running
+      priceUpdateLoop();
+    }
+  } else {
+    // If fetching fails, show an error and remove it from tracking
+    const priceEl = tickerItem.querySelector('.ticker-price');
+    if (priceEl) {
+      priceEl.textContent = 'N/A';
+    }
+    trackedTickers.delete(ticker);
+  }
 }
 
 /**
@@ -1101,7 +1186,7 @@ function main() {
   
   chatFormEl.addEventListener('submit', handleFormSubmit);
   clearButtonEl.addEventListener('click', clearChat);
-  refreshTickerButtonEl.addEventListener('click', fetchTickerPrices);
+  refreshTickerButtonEl.addEventListener('click', fetchAllTrackedPrices);
   historyToggleEl.addEventListener('click', () => {
     appWrapperEl.classList.toggle('history-open');
   });
