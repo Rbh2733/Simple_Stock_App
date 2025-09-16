@@ -15,22 +15,77 @@
     <script type="module" src="index.tsx"></script>
   </head>
   <body>
-    <main id="chat-container">
-      <header class="app-header">
-        <h1>Stock Forecaster AI</h1>
-        <button id="clear-button">Clear</button>
-      </header>
-      <div id="chat-history"></div>
-      <form id="chat-form">
-        <input
-          id="prompt-input"
-          type="text"
-          placeholder="Enter a stock ticker, or two to compare..."
-          aria-label="Stock ticker input"
-          required
-        />
-        <button type="submit" aria-label="Send message">Send</button>
-      </form>
-    </main>
+    <div class="app-wrapper history-open">
+      <aside id="history-panel">
+        <div id="history-panel-scroll-area">
+          <h2>Favorites</h2>
+          <ul id="favorites-list"></ul>
+          <h2>Search History</h2>
+          <ul id="history-list"></ul>
+        </div>
+        <button id="clear-history-button">Clear History</button>
+      </aside>
+      <main id="chat-container">
+        <header class="app-header">
+          <div class="header-left">
+            <button id="history-toggle" aria-label="Toggle history panel">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                height="24px"
+                viewBox="0 0 24 24"
+                width="24px"
+                fill="currentColor"
+              >
+                <path d="M0 0h24v24H0V0z" fill="none" />
+                <path
+                  d="M15.59 7.41L14.17 6l-6 6 6 6 1.41-1.41L10.83 12l4.76-4.59zM11 6l-6 6 6 6 1.41-1.41L7.83 12l4.58-4.59z"
+                />
+              </svg>
+            </button>
+            <h1>Stock Forecaster AI</h1>
+          </div>
+          <div class="header-right">
+            <button
+              id="refresh-ticker-button"
+              class="icon-button"
+              aria-label="Refresh stock prices"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                height="24px"
+                viewBox="0 0 24 24"
+                width="24px"
+                fill="currentColor"
+              >
+                <path d="M0 0h24v24H0V0z" fill="none" />
+                <path
+                  d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+                />
+              </svg>
+            </button>
+            <button id="clear-button">Clear Chat</button>
+          </div>
+        </header>
+        <div id="ticker-tape-container">
+          <div id="ticker-tape"></div>
+          <div id="ticker-status">
+            <span id="market-status-indicator"></span>
+            <span id="market-status-text"></span>
+            <span id="last-updated-timestamp"></span>
+          </div>
+        </div>
+        <div id="chat-history"></div>
+        <form id="chat-form">
+          <input
+            id="prompt-input"
+            type="text"
+            placeholder="Enter a stock ticker, or two to compare..."
+            aria-label="Stock ticker input"
+            required
+          />
+          <button type="submit" aria-label="Send message">Send</button>
+        </form>
+      </main>
+    </div>
   </body>
 </html>
