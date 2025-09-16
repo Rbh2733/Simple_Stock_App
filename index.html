@@ -1,17 +1,21 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Stock Forecaster AI</title>
+    <title>Stock Analyzer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="index.css" />
     <script type="importmap">
-      {
-        "imports": {
-          "@google/genai": "https://esm.sh/@google/genai@^0.7.0",
-          "marked": "https://esm.sh/marked@^15.0.7"
-        }
-      }
-    </script>
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^0.7.0",
+    "marked": "https://esm.sh/marked@^15.0.7",
+    "chart.js/auto": "https://esm.sh/chart.js@^4.4.2/auto",
+    "chartjs-adapter-date-fns": "https://esm.sh/chartjs-adapter-date-fns@^3.0.0",
+    "chartjs-plugin-zoom": "https://esm.sh/chartjs-plugin-zoom@^2.0.1",
+    "chart.js/": "https://aistudiocdn.com/chart.js@^4.5.0/"
+  }
+}
+</script>
     <script type="module" src="index.tsx"></script>
   </head>
   <body>
@@ -42,7 +46,7 @@
                 />
               </svg>
             </button>
-            <h1>Stock Forecaster AI</h1>
+            <h1>Stock Analyzer</h1>
           </div>
           <div class="header-right">
             <button

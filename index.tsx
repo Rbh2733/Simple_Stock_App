@@ -1,4 +1,3 @@
-
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -7,6 +6,11 @@
 
 import { GoogleGenAI, Chat } from '@google/genai';
 import { marked } from 'marked';
+import { Chart, TooltipItem } from 'chart.js/auto';
+import 'chartjs-adapter-date-fns';
+import zoomPlugin from 'chartjs-plugin-zoom';
+
+Chart.register(zoomPlugin);
 
 // DOM Elements
 const chatHistoryEl = document.getElementById('chat-history') as HTMLDivElement;
@@ -51,7 +55,8 @@ Use a markdown table for the following:
 | --- | --- |
 | Company Name | [Full Company Name] |
 | Exchange | [e.g., NASDAQ] |
-| Industry | [e.g., Consumer Electronics] |
+| Sector (GICS) | [e.g., Information Technology] |
+| Industry (GICS) | [e.g., Software] |
 | Website | [URL] |
 | Description | [Brief one-sentence company description] |
 
@@ -116,8 +121,8 @@ Use a markdown table for the following:
   - **Mid Term (4-9 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, connecting recent news, analyst ratings, and estimate revisions to the price target.]
   - **Long Term (12+ Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, referencing fundamental data like P/E, revenue growth, ROE, and the company's competitive landscape.]
 
-**5. Analyst Price Targets (Last 3 Months):**
-- Use price targets issued by respected firms within the last 3 months.
+**5. Analyst Price Targets (Since Last Earnings):**
+- Use price targets issued by respected firms since the previous quarter's earnings report.
 Use a markdown table for the following:
 | Target | Price |
 | --- | --- |
@@ -146,7 +151,7 @@ Use a markdown table for the following:
   - **Overall News Sentiment:** [Positive/Negative/Neutral] - **AI Overview:** [A 1-2 sentence summary of the overall sentiment from the news and its likely short-term impact.]
 
 **8. Analyst Ratings Breakdown:**
-Use a markdown table for the following, finding the number of analysts for each rating:
+Use a markdown table for the following, finding the number of analysts for each rating within the last 30 days:
 | Rating | Count |
 | --- | --- |
 | Strong Buy | [number] |
@@ -374,37 +379,6 @@ function renderAnalystChart(messageEl: HTMLElement) {
 }
 
 /**
- * Creates an SVG text label element.
- * @param x The x-coordinate.
- * @param y The y-coordinate.
- * @param text The text content.
- * @param className The CSS class name.
- * @param dominantBaseline The dominant-baseline attribute value.
- * @param textAnchor The text-anchor attribute value.
- * @returns The created text element.
- */
-function createTextLabel(
-  x: number,
-  y: number,
-  text: string,
-  className: string,
-  dominantBaseline = 'middle',
-  textAnchor = 'end'
-) {
-  const label = document.createElementNS(
-    'http://www.w3.org/2000/svg',
-    'text'
-  );
-  label.setAttribute('x', String(x));
-  label.setAttribute('y', String(y));
-  label.setAttribute('class', className);
-  label.setAttribute('dominant-baseline', dominantBaseline);
-  label.setAttribute('text-anchor', textAnchor);
-  label.textContent = text;
-  return label;
-}
-
-/**
  * Formats a large number into a readable string (e.g., 1.2M).
  * @param num The number to format.
  * @returns The formatted string.
@@ -417,7 +391,7 @@ const formatLargeNumber = (num: number): string => {
 };
 
 /**
- * Finds historical price and volume data and renders it as a combined SVG chart.
+ * Finds historical price and volume data and renders it as a combined interactive chart.
  * @param messageEl The message element to scan for the data.
  */
 function renderHistoricalDataChart(messageEl: HTMLElement) {
@@ -429,124 +403,192 @@ function renderHistoricalDataChart(messageEl: HTMLElement) {
     const preElement = block.parentElement;
     if (!preElement || preElement.tagName !== 'PRE') return;
 
-    let data: { historicalData: { date: string; price: number | null; volume: number | null }[] };
+    let data: {
+      historicalData: { date: string; price: number | null; volume: number | null }[];
+    };
     try {
       data = JSON.parse(block.textContent || '');
     } catch (e) {
       console.error('Failed to parse historical data JSON:', e);
       const errorEl = document.createElement('p');
       errorEl.style.color = 'var(--price-down-color)';
-      errorEl.textContent = 'Could not render historical data chart: Invalid data format received.';
+      errorEl.textContent =
+        'Could not render historical data chart: Invalid data format received.';
       preElement.replaceWith(errorEl);
       return;
     }
 
     // Filter out any entries with null price or volume, as they cannot be charted.
     const historicalData = (data.historicalData || []).filter(
-      (d) => d.price != null && d.volume != null
+      (d) => d.date && d.price != null && d.volume != null
     ) as { date: string; price: number; volume: number }[];
 
-
     if (historicalData.length < 2) {
-      // If there's not enough valid data left to chart, remove the code block or show a message.
       const noDataEl = document.createElement('p');
-      noDataEl.textContent = 'Not enough historical data available to render a chart.';
+      noDataEl.textContent =
+        'Not enough historical data available to render a chart.';
       preElement.replaceWith(noDataEl);
       return;
     }
 
-    const chartContainer = document.createElement('div');
-    chartContainer.className = 'historical-chart-container';
-    chartContainer.setAttribute(
-      'aria-label',
-      'Line chart of historical stock price and bar chart of trading volume over one year.'
+    // Sort data just in case it's not chronological
+    historicalData.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
-    const prices = historicalData.map((d) => d.price);
-    const volumes = historicalData.map((d) => d.volume);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const maxVolume = Math.max(...volumes);
-    const priceRange = maxPrice - minPrice;
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'historical-chart-container';
+    const canvas = document.createElement('canvas');
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute(
+      'aria-label',
+      'Interactive line chart of historical stock price and bar chart of trading volume.'
+    );
+    chartContainer.appendChild(canvas);
 
-    const width = 500, height = 300, padding = 40;
-    const priceChartHeight = (height - 2 * padding) * 0.65;
-    const volumeChartHeight = (height - 2 * padding) * 0.3;
-    const chartGap = (height - 2 * padding) * 0.05;
+    const isDarkMode =
+      window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const textColor = isDarkMode ? '#e8eaed' : '#333';
+    const gridColor = isDarkMode ? '#5f6368' : '#ddd';
+    const primaryColor = getComputedStyle(document.documentElement)
+      .getPropertyValue('--primary-color')
+      .trim();
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    svg.setAttribute('class', 'historical-chart-svg');
+    const chartData = {
+      labels: historicalData.map((d) => d.date),
+      datasets: [
+        {
+          type: 'line' as const,
+          label: 'Price (USD)',
+          data: historicalData.map((d) => d.price),
+          borderColor: primaryColor,
+          backgroundColor: `${primaryColor}33`, // semi-transparent
+          yAxisID: 'yPrice',
+          tension: 0.1,
+          pointRadius: 0,
+          pointHitRadius: 10,
+        },
+        {
+          type: 'bar' as const,
+          label: 'Volume',
+          data: historicalData.map((d) => d.volume),
+          backgroundColor: `${primaryColor}80`, // more opaque
+          yAxisID: 'yVolume',
+        },
+      ],
+    };
 
-    // --- Price Chart ---
-    const pricePoints = historicalData
-      .map((d, i) => {
-        const x = padding + (i / (historicalData.length - 1)) * (width - 2 * padding);
-        const y = padding + priceChartHeight - ((d.price - minPrice) / (priceRange > 0 ? priceRange : 1)) * priceChartHeight;
-        return `${x},${y}`;
-      })
-      .join(' ');
-
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    line.setAttribute('points', pricePoints);
-    line.setAttribute('class', 'historical-chart-line');
-
-    const yAxisPrice = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    yAxisPrice.setAttribute('x1', String(padding));
-    yAxisPrice.setAttribute('y1', String(padding));
-    yAxisPrice.setAttribute('x2', String(padding));
-    yAxisPrice.setAttribute('y2', String(padding + priceChartHeight));
-    yAxisPrice.setAttribute('class', 'historical-chart-axis');
-
-    svg.appendChild(yAxisPrice);
-    svg.appendChild(line);
-    svg.appendChild(createTextLabel(padding - 8, padding, `$${maxPrice.toFixed(2)}`, 'historical-chart-label'));
-    svg.appendChild(createTextLabel(padding - 8, padding + priceChartHeight, `$${minPrice.toFixed(2)}`, 'historical-chart-label'));
-
-    // --- Volume Chart ---
-    const volumeStartY = padding + priceChartHeight + chartGap;
-    const barWidth = (width - 2 * padding) / historicalData.length * 0.8;
-
-    historicalData.forEach((d, i) => {
-      const x = padding + (i / (historicalData.length - 1)) * (width - 2 * padding) - barWidth / 2;
-      const barHeight = (d.volume / maxVolume) * volumeChartHeight;
-      const y = volumeStartY + volumeChartHeight - barHeight;
-      const bar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      bar.setAttribute('x', String(x));
-      bar.setAttribute('y', String(y));
-      bar.setAttribute('width', String(barWidth));
-      bar.setAttribute('height', String(barHeight));
-      bar.setAttribute('class', 'historical-chart-volume-bar');
-      svg.appendChild(bar);
+    new Chart(canvas, {
+      data: chartData,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'day',
+              tooltipFormat: 'MMM d, yyyy',
+            },
+            ticks: {
+              color: textColor,
+              maxRotation: 0,
+              autoSkip: true,
+            },
+            grid: {
+              color: 'transparent',
+            },
+          },
+          yPrice: {
+            type: 'linear',
+            position: 'left',
+            title: {
+              display: true,
+              text: 'Price (USD)',
+              color: textColor,
+            },
+            ticks: {
+              color: textColor,
+              callback: (value) => `$${Number(value).toFixed(2)}`,
+            },
+            grid: {
+              color: gridColor,
+            },
+          },
+          yVolume: {
+            type: 'linear',
+            position: 'right',
+            title: {
+              display: true,
+              text: 'Volume',
+              color: textColor,
+            },
+            ticks: {
+              color: textColor,
+              callback: (value) => formatLargeNumber(Number(value)),
+            },
+            grid: {
+              drawOnChartArea: false, // Only show grid for price axis
+            },
+          },
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: textColor,
+            },
+          },
+          tooltip: {
+            callbacks: {
+              label: (context: TooltipItem<'line' | 'bar'>) => {
+                let label = context.dataset.label || '';
+                if (label) {
+                  label += ': ';
+                }
+                if (context.parsed.y !== null) {
+                  if (context.dataset.yAxisID === 'yPrice') {
+                    label += new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD',
+                    }).format(context.parsed.y);
+                  } else {
+                    label += formatLargeNumber(context.parsed.y);
+                  }
+                }
+                return label;
+              },
+            },
+          },
+          zoom: {
+            pan: {
+              enabled: true,
+              mode: 'x',
+            },
+            zoom: {
+              wheel: {
+                enabled: true,
+              },
+              pinch: {
+                enabled: true,
+              },
+              mode: 'x',
+            },
+            limits: {
+              x: {
+                min: 'original',
+                max: 'original',
+              },
+            },
+          },
+        },
+      },
     });
-    
-    const yAxisVolume = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    yAxisVolume.setAttribute('x1', String(padding));
-    yAxisVolume.setAttribute('y1', String(volumeStartY));
-    yAxisVolume.setAttribute('x2', String(padding));
-    yAxisVolume.setAttribute('y2', String(volumeStartY + volumeChartHeight));
-    yAxisVolume.setAttribute('class', 'historical-chart-axis');
-    svg.appendChild(yAxisVolume);
-    svg.appendChild(createTextLabel(padding - 8, volumeStartY, formatLargeNumber(maxVolume), 'historical-chart-label'));
-    svg.appendChild(createTextLabel(padding - 8, volumeStartY + volumeChartHeight, '0', 'historical-chart-label'));
 
-    // --- Shared X-Axis ---
-    const xAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    const xAxisY = volumeStartY + volumeChartHeight;
-    xAxis.setAttribute('x1', String(padding));
-    xAxis.setAttribute('y1', String(xAxisY));
-    xAxis.setAttribute('x2', String(width - padding));
-    xAxis.setAttribute('y2', String(xAxisY));
-    xAxis.setAttribute('class', 'historical-chart-axis');
-
-    const startDate = new Date(historicalData[0].date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    const endDate = new Date(historicalData[historicalData.length - 1].date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-
-    svg.appendChild(xAxis);
-    svg.appendChild(createTextLabel(padding, xAxisY + 12, startDate, 'historical-chart-label', 'hanging', 'start'));
-    svg.appendChild(createTextLabel(width - padding, xAxisY + 12, endDate, 'historical-chart-label', 'hanging', 'end'));
-
-    chartContainer.appendChild(svg);
     preElement.replaceWith(chartContainer);
   });
 }
@@ -735,7 +777,7 @@ function initializeChat() {
       },
     });
     displayMessage(
-      'Welcome to the Stock Forecaster AI. Enter a stock ticker to get a detailed analysis.',
+      'What can I look up for you?',
       'model'
     );
   } catch (error) {
