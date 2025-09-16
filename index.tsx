@@ -50,18 +50,42 @@ Use a markdown table for the following:
 | 50-Day Moving Average | [price] |
 | 200-Day Moving Average | [price] |
 | RSI (14-Day) | [number] |
-| Key Support Level | [price] |
-| Key Resistance Level | [price] |
 | Short-term Trend | [e.g., Bullish] |
 
-**3. Forecast:**
+**3. Pivot Points & Support/Resistance:**
+- Calculate and present pivot points using both Standard and Fibonacci methods.
+- Use two separate markdown tables.
+
+**Standard Pivot Points:**
+| Level | Price |
+| --- | --- |
+| Resistance 3 (R3) | [price] |
+| Resistance 2 (R2) | [price] |
+| Resistance 1 (R1) | [price] |
+| **Pivot Point (P)** | **[price]** |
+| Support 1 (S1) | [price] |
+| Support 2 (S2) | [price] |
+| Support 3 (S3) | [price] |
+
+**Fibonacci Pivot Points:**
+| Level | Price |
+| --- | --- |
+| Resistance 3 (R3) | [price] |
+| Resistance 2 (R2) | [price] |
+| Resistance 1 (R1) | [price] |
+| **Pivot Point (P)** | **[price]** |
+| Support 1 (S1) | [price] |
+| Support 2 (S2) | [price] |
+| Support 3 (S3) | [price] |
+
+**4. Forecast:**
 - Based on the technical analysis and key metrics, provide a brief forecast, a price target, and reasoning for the following periods.
 - Use the following markdown list format:
   - **Short Term (1-3 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, citing specific technical indicators like RSI, moving averages, or support/resistance levels from the analysis.]
   - **Mid Term (4-9 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, connecting recent news, analyst ratings, and estimate revisions to the price target.]
   - **Long Term (12+ Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, referencing fundamental data like P/E ratio, revenue growth, ROE, and the company's competitive landscape.]
 
-**4. Analyst Price Targets (Last 3 Months):**
+**5. Analyst Price Targets (Last 3 Months):**
 - Use price targets issued by respected firms within the last 3 months.
 Use a markdown table for the following:
 | Target | Price |
@@ -70,7 +94,7 @@ Use a markdown table for the following:
 | Average | [price] |
 | Low | [price] |
 
-**5. Recent Estimate Revisions (Last 30 Days):**
+**6. Recent Estimate Revisions (Last 30 Days):**
 - Summarize up to 3 of the most notable revisions to price targets or EPS estimates in the last 30 days.
 - If no notable revisions are found, please state that.
 - Use the following markdown table format:
@@ -79,16 +103,18 @@ Use a markdown table for the following:
 | [YYYY-MM-DD] | Price Target   | [e.g., $150 -> $175]  | [Firm Name]  |
 | [YYYY-MM-DD] | EPS Estimate   | [e.g., $1.20 -> $1.25] | [Firm Name]  |
 
-**6. Recent News Summary (Past 7 Days):**
+**7. Recent News Summary (Past 7 Days):**
 - Summarize 2-3 recent, significant news headlines from the past 7 days.
-- For each headline, provide a concise summary as a markdown link to the source, the sentiment (Positive, Negative, or Neutral), and a recommended action for investors (e.g., Watch, Consider Buying, Consider Selling).
+- For each headline, provide a concise summary as a markdown link to the source, the sentiment (Positive, Negative, or Neutral), and a brief explanation of its potential impact on the stock price.
 - Use the following markdown table format:
-| News Summary | Sentiment | Investor Action |
+| News Summary | Sentiment | Potential Impact on Stock Price |
 | --- | --- | --- |
-| [Concise news summary](URL) | Positive | Watch |
-| [Concise news summary](URL) | Negative | Consider Selling |
+| [Concise news summary](URL) | Positive | [Brief explanation, e.g., "Strong earnings report could boost investor confidence and drive the price up."] |
+| [Concise news summary](URL) | Negative | [Brief explanation, e.g., "Regulatory concerns may lead to a sell-off and decrease the price."] |
+- After the table, provide an overall sentiment analysis in the following format:
+  - **Overall News Sentiment:** [Positive/Negative/Neutral] - **AI Overview:** [A 1-2 sentence summary of the overall sentiment from the news and its likely short-term impact.]
 
-**7. Analyst Ratings Breakdown:**
+**8. Analyst Ratings Breakdown:**
 Use a markdown table for the following, finding the number of analysts for each rating:
 | Rating | Count |
 | --- | --- |
@@ -127,10 +153,11 @@ Use a single, comprehensive markdown table to compare the stocks.
 | Long-Term Target | [price] | [price] |
 | **_Analyst Consensus_** | | |
 | Average Price Target | [price] | [price] |
-| Ratings (Buy/Hold/Sell) | [# Buy]/[# Hold]/[# Sell] | [# Buy]/[# Hold]/[# Sell] |
 
 **Comparative Summary:**
 - After the table, provide 2-3 brief bullet points summarizing the key differences and highlighting potential advantages of each stock based on the data.
+
+After the summary, add a separate "Analyst Ratings Breakdown" for each stock. Each breakdown should have a heading with the ticker (e.g., "### Analyst Ratings Breakdown: [TICKER 1]") and a markdown table exactly like the one in Section 8 of the "SINGLE STOCK ANALYSIS".
 
 Your response should prioritize numbers and use brief, clear formatting. Avoid long paragraphs. All information is for educational purposes only. Do not give financial advice.`;
 
@@ -163,82 +190,88 @@ function displayMessage(
  * @param messageEl The message element to scan for tables.
  */
 function renderAnalystChart(messageEl: HTMLElement) {
-  const heading = Array.from(
+  const headings = Array.from(
     messageEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
-  ).find((h) => h.textContent?.trim().includes('Analyst Ratings Breakdown'));
+  ).filter((h) => h.textContent?.trim().includes('Analyst Ratings Breakdown'));
 
-  if (!heading) return;
+  if (headings.length === 0) return;
 
-  const table = heading.nextElementSibling;
-  if (!table || table.tagName !== 'TABLE') return;
+  headings.forEach((heading) => {
+    const table = heading.nextElementSibling;
+    if (!table || table.tagName !== 'TABLE') return;
 
-  const data: { rating: string; count: number }[] = [];
-  const rows = table.querySelectorAll('tbody tr');
+    const data: { rating: string; count: number }[] = [];
+    const rows = table.querySelectorAll('tbody tr');
 
-  rows.forEach((row) => {
-    const cells = row.querySelectorAll('td');
-    if (cells.length === 2) {
-      const rating = cells[0].textContent?.trim() || '';
-      const count = parseInt(cells[1].textContent?.trim() || '0', 10);
-      if (rating && !isNaN(count) && count >= 0) {
-        data.push({ rating, count });
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll('td');
+      if (cells.length === 2) {
+        const rating = cells[0].textContent?.trim() || '';
+        const count = parseInt(cells[1].textContent?.trim() || '0', 10);
+        if (rating && !isNaN(count) && count >= 0) {
+          data.push({ rating, count });
+        }
       }
+    });
+
+    if (data.length === 0) return;
+
+    const totalCount = data.reduce((sum, item) => sum + item.count, 0);
+    if (totalCount === 0) {
+      const noDataEl = document.createElement('p');
+      noDataEl.textContent =
+        'No analyst rating counts were found for this stock.';
+      table.replaceWith(noDataEl);
+      return;
     }
+
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'chart-container';
+    chartContainer.setAttribute('aria-label', 'Bar chart of analyst ratings');
+
+    data.forEach((item) => {
+      const percentage = (item.count / totalCount) * 100;
+      const barWrapper = document.createElement('div');
+      barWrapper.className = 'chart-bar-wrapper';
+
+      const label = document.createElement('div');
+      label.className = 'chart-label';
+      label.textContent = item.rating;
+
+      const barContainer = document.createElement('div');
+      barContainer.className = 'chart-bar-container';
+      barContainer.setAttribute('role', 'progressbar');
+      barContainer.setAttribute('aria-valuenow', String(item.count));
+      barContainer.setAttribute('aria-valuemin', '0');
+      barContainer.setAttribute('aria-valuemax', String(totalCount));
+      barContainer.setAttribute(
+        'aria-label',
+        `${item.rating}: ${item.count} ratings`
+      );
+
+      const bar = document.createElement('div');
+      bar.className = 'chart-bar';
+      const ratingClass = item.rating.toLowerCase().replace(/\s+/g, '-');
+      bar.classList.add(`rating-${ratingClass}`);
+      // Defer setting the width to allow CSS transition to work
+      setTimeout(() => {
+        bar.style.width = `${percentage}%`;
+      }, 10);
+
+      const value = document.createElement('div');
+      value.className = 'chart-value';
+      value.textContent = String(item.count);
+
+      barContainer.appendChild(bar);
+      barWrapper.appendChild(label);
+      barWrapper.appendChild(barContainer);
+      barWrapper.appendChild(value);
+
+      chartContainer.appendChild(barWrapper);
+    });
+
+    table.replaceWith(chartContainer);
   });
-
-  if (data.length === 0) return;
-
-  const totalCount = data.reduce((sum, item) => sum + item.count, 0);
-  if (totalCount === 0) {
-    const noDataEl = document.createElement('p');
-    noDataEl.textContent = 'No analyst rating counts were found for this stock.';
-    table.replaceWith(noDataEl);
-    return;
-  }
-
-  const chartContainer = document.createElement('div');
-  chartContainer.className = 'chart-container';
-  chartContainer.setAttribute('aria-label', 'Bar chart of analyst ratings');
-
-  data.forEach((item) => {
-    const percentage = (item.count / totalCount) * 100;
-    const barWrapper = document.createElement('div');
-    barWrapper.className = 'chart-bar-wrapper';
-
-    const label = document.createElement('div');
-    label.className = 'chart-label';
-    label.textContent = item.rating;
-
-    const barContainer = document.createElement('div');
-    barContainer.className = 'chart-bar-container';
-    barContainer.setAttribute('role', 'progressbar');
-    barContainer.setAttribute('aria-valuenow', String(item.count));
-    barContainer.setAttribute('aria-valuemin', '0');
-    barContainer.setAttribute('aria-valuemax', String(totalCount));
-    barContainer.setAttribute('aria-label', `${item.rating}: ${item.count} ratings`);
-
-    const bar = document.createElement('div');
-    bar.className = 'chart-bar';
-    const ratingClass = item.rating.toLowerCase().replace(/\s+/g, '-');
-    bar.classList.add(`rating-${ratingClass}`);
-    // Defer setting the width to allow CSS transition to work
-    setTimeout(() => {
-      bar.style.width = `${percentage}%`;
-    }, 10);
-
-    const value = document.createElement('div');
-    value.className = 'chart-value';
-    value.textContent = String(item.count);
-
-    barContainer.appendChild(bar);
-    barWrapper.appendChild(label);
-    barWrapper.appendChild(barContainer);
-    barWrapper.appendChild(value);
-
-    chartContainer.appendChild(barWrapper);
-  });
-
-  table.replaceWith(chartContainer);
 }
 
 /**
