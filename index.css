@@ -262,76 +262,6 @@ h1 {
   color: white;
 }
 
-/* Ticker Tape */
-#ticker-tape-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: var(--header-bg);
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-#ticker-tape {
-  display: flex;
-  gap: 24px;
-  flex-grow: 1;
-  overflow: hidden;
-}
-
-.ticker-item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background-color 0.4s ease-out;
-}
-
-.ticker-symbol {
-  font-weight: 500;
-  font-size: 1rem;
-}
-
-.ticker-price {
-  font-weight: 400;
-  font-size: 0.9rem;
-}
-
-.ticker-item.price-up {
-  background-color: var(--price-up-color);
-  color: white;
-}
-.ticker-item.price-down {
-  background-color: var(--price-down-color);
-  color: white;
-}
-
-#ticker-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.8rem;
-  color: var(--text-color);
-  opacity: 0.8;
-  flex-shrink: 0;
-  margin-left: 16px;
-}
-
-#market-status-indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-#last-updated-timestamp {
-  min-width: 140px; /* Prevent layout shift */
-  text-align: right;
-}
-
 /* Chat History */
 #chat-history {
   flex-grow: 1;
@@ -499,8 +429,36 @@ h1 {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background-color: var(--background-color);
-  height: 350px;
-  position: relative;
+}
+
+.historical-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.historical-chart-line {
+  fill: none;
+  stroke: var(--primary-color);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.historical-chart-volume-bar {
+  fill: var(--primary-color);
+  opacity: 0.3;
+}
+
+.historical-chart-axis {
+  stroke: var(--border-color);
+  stroke-width: 1;
+}
+
+.historical-chart-label {
+  font-size: 9px;
+  fill: var(--text-color);
+  font-family: 'Google Sans', sans-serif, system-ui;
 }
 
 /* Chat Input Form */
@@ -610,16 +568,6 @@ h1 {
   .header-right {
     gap: 8px;
   }
-  #ticker-tape-container {
-    padding: 6px 12px;
-    flex-wrap: wrap;
-  }
-  #ticker-status {
-    width: 100%;
-    justify-content: flex-end;
-    margin-left: 0;
-    padding-top: 4px;
-  }
   #chat-history {
     padding: 12px;
   }
@@ -663,5 +611,9 @@ h1 {
   }
   .rating-strong-sell {
     background-color: #d32f2f;
+  }
+  .historical-chart-volume-bar {
+    fill: var(--primary-color);
+    opacity: 0.4;
   }
 }

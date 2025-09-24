@@ -1,21 +1,17 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Stock Analyzer</title>
+    <title>Stock Forecaster AI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="index.css" />
     <script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^0.7.0",
-    "marked": "https://esm.sh/marked@^15.0.7",
-    "chart.js/auto": "https://esm.sh/chart.js@^4.4.2/auto",
-    "chartjs-adapter-date-fns": "https://esm.sh/chartjs-adapter-date-fns@^3.0.0",
-    "chartjs-plugin-zoom": "https://esm.sh/chartjs-plugin-zoom@^2.0.1",
-    "chart.js/": "https://aistudiocdn.com/chart.js@^4.5.0/"
-  }
-}
-</script>
+      {
+        "imports": {
+          "@google/genai": "https://esm.sh/@google/genai@^0.7.0",
+          "marked": "https://esm.sh/marked@^15.0.7"
+        }
+      }
+    </script>
     <script type="module" src="index.tsx"></script>
   </head>
   <body>
@@ -46,38 +42,12 @@
                 />
               </svg>
             </button>
-            <h1>Stock Analyzer</h1>
+            <h1>Stock Forecaster AI</h1>
           </div>
           <div class="header-right">
-            <button
-              id="refresh-ticker-button"
-              class="icon-button"
-              aria-label="Refresh stock prices"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                height="24px"
-                viewBox="0 0 24 24"
-                width="24px"
-                fill="currentColor"
-              >
-                <path d="M0 0h24v24H0V0z" fill="none" />
-                <path
-                  d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
-                />
-              </svg>
-            </button>
             <button id="clear-button">Clear Chat</button>
           </div>
         </header>
-        <div id="ticker-tape-container">
-          <div id="ticker-tape"></div>
-          <div id="ticker-status">
-            <span id="market-status-indicator"></span>
-            <span id="market-status-text"></span>
-            <span id="last-updated-timestamp"></span>
-          </div>
-        </div>
         <div id="chat-history"></div>
         <form id="chat-form">
           <input

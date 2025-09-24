@@ -1,3 +1,5 @@
+
+
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -6,11 +8,6 @@
 
 import { GoogleGenAI, Chat } from '@google/genai';
 import { marked } from 'marked';
-import { Chart, TooltipItem } from 'chart.js/auto';
-import 'chartjs-adapter-date-fns';
-import zoomPlugin from 'chartjs-plugin-zoom';
-
-Chart.register(zoomPlugin);
 
 // DOM Elements
 const chatHistoryEl = document.getElementById('chat-history') as HTMLDivElement;
@@ -24,21 +21,12 @@ const favoritesListEl = document.getElementById('favorites-list') as HTMLUListEl
 const historyToggleEl = document.getElementById('history-toggle') as HTMLButtonElement;
 const clearHistoryButtonEl = document.getElementById('clear-history-button') as HTMLButtonElement;
 const appWrapperEl = document.querySelector('.app-wrapper') as HTMLDivElement;
-const tickerTapeEl = document.getElementById('ticker-tape') as HTMLDivElement;
-const refreshTickerButtonEl = document.getElementById('refresh-ticker-button') as HTMLButtonElement;
-const marketStatusIndicatorEl = document.getElementById('market-status-indicator') as HTMLSpanElement;
-const marketStatusTextEl = document.getElementById('market-status-text') as HTMLSpanElement;
-const lastUpdatedTimestampEl = document.getElementById('last-updated-timestamp') as HTMLSpanElement;
 
 
 let ai: GoogleGenAI;
 let chat: Chat;
 let searchHistory: string[] = [];
 let favorites: string[] = [];
-const trackedTickers = new Map<string, number>();
-let priceUpdateInterval: number | null = null;
-let updateQueue: string[] = [];
-let isUpdatingPriceLoop = false;
 
 const SYSTEM_INSTRUCTION = `You are an expert financial analyst AI. Your goal is to provide a concise, data-driven stock analysis. Use Google Search to find the latest information. If specific data is unavailable, please state 'N/A' for that metric.
 
@@ -57,8 +45,7 @@ Use a markdown table for the following:
 | --- | --- |
 | Company Name | [Full Company Name] |
 | Exchange | [e.g., NASDAQ] |
-| Sector (GICS) | [e.g., Information Technology] |
-| Industry (GICS) | [e.g., Software] |
+| Industry | [e.g., Consumer Electronics] |
 | Website | [URL] |
 | Description | [Brief one-sentence company description] |
 
@@ -123,8 +110,8 @@ Use a markdown table for the following:
   - **Mid Term (4-9 Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, connecting recent news, analyst ratings, and estimate revisions to the price target.]
   - **Long Term (12+ Months):** [Forecast] - **Price Target:** [price]. **Reasoning:** [Brief reasoning, referencing fundamental data like P/E, revenue growth, ROE, and the company's competitive landscape.]
 
-**5. Analyst Price Targets (Since Last Earnings):**
-- Use price targets issued by respected firms since the previous quarter's earnings report.
+**5. Analyst Price Targets (Last 3 Months):**
+- Use price targets issued by respected firms within the last 3 months.
 Use a markdown table for the following:
 | Target | Price |
 | --- | --- |
@@ -153,7 +140,7 @@ Use a markdown table for the following:
   - **Overall News Sentiment:** [Positive/Negative/Neutral] - **AI Overview:** [A 1-2 sentence summary of the overall sentiment from the news and its likely short-term impact.]
 
 **8. Analyst Ratings Breakdown:**
-Use a markdown table for the following, finding the number of analysts for each rating within the last 30 days:
+Use a markdown table for the following, finding the number of analysts for each rating:
 | Rating | Count |
 | --- | --- |
 | Strong Buy | [number] |
@@ -381,6 +368,37 @@ function renderAnalystChart(messageEl: HTMLElement) {
 }
 
 /**
+ * Creates an SVG text label element.
+ * @param x The x-coordinate.
+ * @param y The y-coordinate.
+ * @param text The text content.
+ * @param className The CSS class name.
+ * @param dominantBaseline The dominant-baseline attribute value.
+ * @param textAnchor The text-anchor attribute value.
+ * @returns The created text element.
+ */
+function createTextLabel(
+  x: number,
+  y: number,
+  text: string,
+  className: string,
+  dominantBaseline = 'middle',
+  textAnchor = 'end'
+) {
+  const label = document.createElementNS(
+    'http://www.w3.org/2000/svg',
+    'text'
+  );
+  label.setAttribute('x', String(x));
+  label.setAttribute('y', String(y));
+  label.setAttribute('class', className);
+  label.setAttribute('dominant-baseline', dominantBaseline);
+  label.setAttribute('text-anchor', textAnchor);
+  label.textContent = text;
+  return label;
+}
+
+/**
  * Formats a large number into a readable string (e.g., 1.2M).
  * @param num The number to format.
  * @returns The formatted string.
@@ -393,7 +411,7 @@ const formatLargeNumber = (num: number): string => {
 };
 
 /**
- * Finds historical price and volume data and renders it as a combined interactive chart.
+ * Finds historical price and volume data and renders it as a combined SVG chart.
  * @param messageEl The message element to scan for the data.
  */
 function renderHistoricalDataChart(messageEl: HTMLElement) {
@@ -405,192 +423,124 @@ function renderHistoricalDataChart(messageEl: HTMLElement) {
     const preElement = block.parentElement;
     if (!preElement || preElement.tagName !== 'PRE') return;
 
-    let data: {
-      historicalData: { date: string; price: number | null; volume: number | null }[];
-    };
+    let data: { historicalData: { date: string; price: number | null; volume: number | null }[] };
     try {
       data = JSON.parse(block.textContent || '');
     } catch (e) {
       console.error('Failed to parse historical data JSON:', e);
       const errorEl = document.createElement('p');
       errorEl.style.color = 'var(--price-down-color)';
-      errorEl.textContent =
-        'Could not render historical data chart: Invalid data format received.';
+      errorEl.textContent = 'Could not render historical data chart: Invalid data format received.';
       preElement.replaceWith(errorEl);
       return;
     }
 
     // Filter out any entries with null price or volume, as they cannot be charted.
     const historicalData = (data.historicalData || []).filter(
-      (d) => d.date && d.price != null && d.volume != null
+      (d) => d.price != null && d.volume != null
     ) as { date: string; price: number; volume: number }[];
 
+
     if (historicalData.length < 2) {
+      // If there's not enough valid data left to chart, remove the code block or show a message.
       const noDataEl = document.createElement('p');
-      noDataEl.textContent =
-        'Not enough historical data available to render a chart.';
+      noDataEl.textContent = 'Not enough historical data available to render a chart.';
       preElement.replaceWith(noDataEl);
       return;
     }
 
-    // Sort data just in case it's not chronological
-    historicalData.sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-
     const chartContainer = document.createElement('div');
     chartContainer.className = 'historical-chart-container';
-    const canvas = document.createElement('canvas');
-    canvas.setAttribute('role', 'img');
-    canvas.setAttribute(
+    chartContainer.setAttribute(
       'aria-label',
-      'Interactive line chart of historical stock price and bar chart of trading volume.'
+      'Line chart of historical stock price and bar chart of trading volume over one year.'
     );
-    chartContainer.appendChild(canvas);
 
-    const isDarkMode =
-      window.matchMedia &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const textColor = isDarkMode ? '#e8eaed' : '#333';
-    const gridColor = isDarkMode ? '#5f6368' : '#ddd';
-    const primaryColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--primary-color')
-      .trim();
+    const prices = historicalData.map((d) => d.price);
+    const volumes = historicalData.map((d) => d.volume);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const maxVolume = Math.max(...volumes);
+    const priceRange = maxPrice - minPrice;
 
-    const chartData = {
-      labels: historicalData.map((d) => d.date),
-      datasets: [
-        {
-          type: 'line' as const,
-          label: 'Price (USD)',
-          data: historicalData.map((d) => d.price),
-          borderColor: primaryColor,
-          backgroundColor: `${primaryColor}33`, // semi-transparent
-          yAxisID: 'yPrice',
-          tension: 0.1,
-          pointRadius: 0,
-          pointHitRadius: 10,
-        },
-        {
-          type: 'bar' as const,
-          label: 'Volume',
-          data: historicalData.map((d) => d.volume),
-          backgroundColor: `${primaryColor}80`, // more opaque
-          yAxisID: 'yVolume',
-        },
-      ],
-    };
+    const width = 500, height = 300, padding = 40;
+    const priceChartHeight = (height - 2 * padding) * 0.65;
+    const volumeChartHeight = (height - 2 * padding) * 0.3;
+    const chartGap = (height - 2 * padding) * 0.05;
 
-    new Chart(canvas, {
-      data: chartData,
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false,
-        },
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              unit: 'day',
-              tooltipFormat: 'MMM d, yyyy',
-            },
-            ticks: {
-              color: textColor,
-              maxRotation: 0,
-              autoSkip: true,
-            },
-            grid: {
-              color: 'transparent',
-            },
-          },
-          yPrice: {
-            type: 'linear',
-            position: 'left',
-            title: {
-              display: true,
-              text: 'Price (USD)',
-              color: textColor,
-            },
-            ticks: {
-              color: textColor,
-              callback: (value) => `$${Number(value).toFixed(2)}`,
-            },
-            grid: {
-              color: gridColor,
-            },
-          },
-          yVolume: {
-            type: 'linear',
-            position: 'right',
-            title: {
-              display: true,
-              text: 'Volume',
-              color: textColor,
-            },
-            ticks: {
-              color: textColor,
-              callback: (value) => formatLargeNumber(Number(value)),
-            },
-            grid: {
-              drawOnChartArea: false, // Only show grid for price axis
-            },
-          },
-        },
-        plugins: {
-          legend: {
-            labels: {
-              color: textColor,
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label: (context: TooltipItem<'line' | 'bar'>) => {
-                let label = context.dataset.label || '';
-                if (label) {
-                  label += ': ';
-                }
-                if (context.parsed.y !== null) {
-                  if (context.dataset.yAxisID === 'yPrice') {
-                    label += new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(context.parsed.y);
-                  } else {
-                    label += formatLargeNumber(context.parsed.y);
-                  }
-                }
-                return label;
-              },
-            },
-          },
-          zoom: {
-            pan: {
-              enabled: true,
-              mode: 'x',
-            },
-            zoom: {
-              wheel: {
-                enabled: true,
-              },
-              pinch: {
-                enabled: true,
-              },
-              mode: 'x',
-            },
-            limits: {
-              x: {
-                min: 'original',
-                max: 'original',
-              },
-            },
-          },
-        },
-      },
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('class', 'historical-chart-svg');
+
+    // --- Price Chart ---
+    const pricePoints = historicalData
+      .map((d, i) => {
+        const x = padding + (i / (historicalData.length - 1)) * (width - 2 * padding);
+        const y = padding + priceChartHeight - ((d.price - minPrice) / (priceRange > 0 ? priceRange : 1)) * priceChartHeight;
+        return `${x},${y}`;
+      })
+      .join(' ');
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', pricePoints);
+    line.setAttribute('class', 'historical-chart-line');
+
+    const yAxisPrice = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    yAxisPrice.setAttribute('x1', String(padding));
+    yAxisPrice.setAttribute('y1', String(padding));
+    yAxisPrice.setAttribute('x2', String(padding));
+    yAxisPrice.setAttribute('y2', String(padding + priceChartHeight));
+    yAxisPrice.setAttribute('class', 'historical-chart-axis');
+
+    svg.appendChild(yAxisPrice);
+    svg.appendChild(line);
+    svg.appendChild(createTextLabel(padding - 8, padding, `$${maxPrice.toFixed(2)}`, 'historical-chart-label'));
+    svg.appendChild(createTextLabel(padding - 8, padding + priceChartHeight, `$${minPrice.toFixed(2)}`, 'historical-chart-label'));
+
+    // --- Volume Chart ---
+    const volumeStartY = padding + priceChartHeight + chartGap;
+    const barWidth = (width - 2 * padding) / historicalData.length * 0.8;
+
+    historicalData.forEach((d, i) => {
+      const x = padding + (i / (historicalData.length - 1)) * (width - 2 * padding) - barWidth / 2;
+      const barHeight = (d.volume / maxVolume) * volumeChartHeight;
+      const y = volumeStartY + volumeChartHeight - barHeight;
+      const bar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bar.setAttribute('x', String(x));
+      bar.setAttribute('y', String(y));
+      bar.setAttribute('width', String(barWidth));
+      bar.setAttribute('height', String(barHeight));
+      bar.setAttribute('class', 'historical-chart-volume-bar');
+      svg.appendChild(bar);
     });
+    
+    const yAxisVolume = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    yAxisVolume.setAttribute('x1', String(padding));
+    yAxisVolume.setAttribute('y1', String(volumeStartY));
+    yAxisVolume.setAttribute('x2', String(padding));
+    yAxisVolume.setAttribute('y2', String(volumeStartY + volumeChartHeight));
+    yAxisVolume.setAttribute('class', 'historical-chart-axis');
+    svg.appendChild(yAxisVolume);
+    svg.appendChild(createTextLabel(padding - 8, volumeStartY, formatLargeNumber(maxVolume), 'historical-chart-label'));
+    svg.appendChild(createTextLabel(padding - 8, volumeStartY + volumeChartHeight, '0', 'historical-chart-label'));
 
+    // --- Shared X-Axis ---
+    const xAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    const xAxisY = volumeStartY + volumeChartHeight;
+    xAxis.setAttribute('x1', String(padding));
+    xAxis.setAttribute('y1', String(xAxisY));
+    xAxis.setAttribute('x2', String(width - padding));
+    xAxis.setAttribute('y2', String(xAxisY));
+    xAxis.setAttribute('class', 'historical-chart-axis');
+
+    const startDate = new Date(historicalData[0].date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    const endDate = new Date(historicalData[historicalData.length - 1].date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+    svg.appendChild(xAxis);
+    svg.appendChild(createTextLabel(padding, xAxisY + 12, startDate, 'historical-chart-label', 'hanging', 'start'));
+    svg.appendChild(createTextLabel(width - padding, xAxisY + 12, endDate, 'historical-chart-label', 'hanging', 'end'));
+
+    chartContainer.appendChild(svg);
     preElement.replaceWith(chartContainer);
   });
 }
@@ -779,7 +729,7 @@ function initializeChat() {
       },
     });
     displayMessage(
-      'What can I look up for you?',
+      'Welcome to the Stock Forecaster AI. Enter a stock ticker to get a detailed analysis.',
       'model'
     );
   } catch (error) {
@@ -788,291 +738,6 @@ function initializeChat() {
       'Error: Could not initialize AI chat. Please check your API key and network connection.',
       'model'
     );
-  }
-}
-
-// --- WebSocket and Ticker Tape Functions ---
-
-/**
- * Checks if the US stock market is currently open.
- * Considers time, day of the week, and major US holidays.
- * @returns {boolean} True if the market is open, false otherwise.
- */
-function isMarketOpen(): boolean {
-  const now = new Date();
-  // Convert current time to Eastern Time (ET)
-  const etDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const day = etDate.getDay(); // 0 = Sunday, 6 = Saturday
-  const hour = etDate.getHours();
-  const minute = etDate.getMinutes();
-
-  // Market is open 9:30 AM to 4:00 PM ET
-  const isOpenTime = (hour > 9 || (hour === 9 && minute >= 30)) && hour < 16;
-  // Market is open Monday to Friday
-  const isOpenDay = day > 0 && day < 6;
-
-  if (!isOpenTime || !isOpenDay) {
-    return false;
-  }
-  
-  // Check for major US holidays (simplified list)
-  const year = etDate.getFullYear();
-  const month = etDate.getMonth() + 1; // 1-12
-  const date = etDate.getDate();
-
-  const holidays = [
-    `1-1`, // New Year's Day
-    `1-${new Date(year, 0, 15).getDate()}`, // MLK Day (3rd Mon in Jan) - simplified
-    `2-${new Date(year, 1, 19).getDate()}`, // Presidents' Day (3rd Mon in Feb) - simplified
-    `5-${new Date(year, 4, 27).getDate()}`, // Memorial Day (Last Mon in May) - simplified
-    `6-19`, // Juneteenth
-    `7-4`, // Independence Day
-    `9-${new Date(year, 8, 2).getDate()}`, // Labor Day (1st Mon in Sep) - simplified
-    `11-${new Date(year, 10, 28).getDate()}`, // Thanksgiving (4th Thu in Nov) - simplified
-    `12-25` // Christmas Day
-  ];
-  const todayHoliday = `${month}-${date}`;
-  if (holidays.includes(todayHoliday)) {
-    return false;
-  }
-
-  // Could add more complex holiday logic (e.g., Good Friday) if needed.
-  return true;
-}
-
-/**
- * Updates the market status UI elements.
- */
-function updateMarketStatusUI() {
-  const marketOpen = isMarketOpen();
-  if (marketOpen) {
-    marketStatusTextEl.textContent = 'Market Open';
-    marketStatusIndicatorEl.style.backgroundColor = 'var(--price-up-color)';
-  } else {
-    marketStatusTextEl.textContent = 'Market Closed';
-    marketStatusIndicatorEl.style.backgroundColor = 'var(--price-down-color)';
-  }
-}
-
-/**
- * Fetches the latest stock price for a given ticker using the AI model.
- * @param ticker The stock ticker symbol.
- * @returns The price as a number, or null if it fails.
- */
-async function fetchRealPrice(ticker: string): Promise<number | null> {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `What is the most recent stock price for ${ticker}? Please provide only the numerical value, for example: 123.45`,
-      config: {
-        tools: [{ googleSearch: {} }],
-        // Disable thinking for a faster, more direct response for this simple query.
-        thinkingConfig: { thinkingBudget: 0 },
-      },
-    });
-    // The response might contain '$' or other text. Clean it up.
-    const priceText = response.text.trim().replace(/[^0-9.]/g, '');
-    const price = parseFloat(priceText);
-    if (isNaN(price) || price === 0) {
-      console.warn(
-        `Could not parse a valid price for ${ticker} from response: "${response.text}"`
-      );
-      return null;
-    }
-    return price;
-  } catch (error) {
-    console.error(`Failed to fetch price for ${ticker}:`, error);
-    return null;
-  }
-}
-
-/**
- * The main loop for updating ticker prices one by one when the market is open.
- * This spaces out API calls to avoid rate limiting.
- */
-async function priceUpdateLoop() {
-  if (isUpdatingPriceLoop || !isMarketOpen()) {
-    return;
-  }
-
-  // If the queue is empty, repopulate it with all tracked tickers for the next cycle.
-  if (updateQueue.length === 0 && trackedTickers.size > 0) {
-    updateQueue = Array.from(trackedTickers.keys());
-  }
-
-  if (updateQueue.length === 0) {
-    return; // Nothing to update
-  }
-
-  isUpdatingPriceLoop = true;
-  const ticker = updateQueue.shift();
-
-  if (ticker) {
-    const price = await fetchRealPrice(ticker);
-    if (price !== null) {
-      trackedTickers.set(ticker, price);
-      // Dispatch an event to update the UI, mimicking a WebSocket message
-      const event = new MessageEvent('message', {
-        data: JSON.stringify([{ ticker, price }]),
-      });
-      window.dispatchEvent(event);
-    }
-  }
-
-  isUpdatingPriceLoop = false;
-  // Schedule the next update. The delay creates a polling effect.
-  setTimeout(priceUpdateLoop, 3000); // 3-second delay between each ticker update
-}
-
-/**
- * Fetches the latest closing price for all tracked tickers.
- * Used when the market is closed or for a manual refresh.
- */
-async function fetchAllTrackedPrices() {
-  const tickers = Array.from(trackedTickers.keys());
-  for (const ticker of tickers) {
-    const price = await fetchRealPrice(ticker);
-    if (price !== null) {
-      trackedTickers.set(ticker, price);
-      const event = new MessageEvent('message', {
-        data: JSON.stringify([{ ticker, price }]),
-      });
-      window.dispatchEvent(event);
-    }
-    // Add a small delay between requests
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-}
-
-/**
- * Manages the automatic ticker price updates based on market hours.
- */
-function manageTickerUpdates() {
-  updateMarketStatusUI();
-
-  if (isMarketOpen()) {
-    // If market is open, start the continuous update loop
-    priceUpdateLoop();
-  } else {
-    // If market is closed, just fetch the latest closing price once for any existing tickers
-    if (trackedTickers.size > 0) {
-      fetchAllTrackedPrices();
-    }
-  }
-}
-
-/**
- * Handles incoming WebSocket messages and updates the ticker tape.
- * @param event The WebSocket message event.
- */
-function handleWebSocketMessage(event: MessageEvent) {
-  // Only process string data. Other 'message' events may have non-string data.
-  if (typeof event.data !== 'string') {
-    return;
-  }
-
-  try {
-    const updates: any = JSON.parse(event.data);
-    
-    // Validate the structure of the parsed data to ensure it's our ticker update.
-    if (!Array.isArray(updates) || (updates.length > 0 && typeof updates[0]?.ticker === 'undefined')) {
-      return; // Not the data format we expect, so we ignore it.
-    }
-
-    (updates as { ticker: string; price: number }[]).forEach(update => {
-      const tickerItem = document.getElementById(`ticker-${update.ticker}`);
-      if (tickerItem) {
-        const priceEl = tickerItem.querySelector('.ticker-price') as HTMLSpanElement;
-        const oldPrice = parseFloat(priceEl.textContent?.substring(1) || '0');
-        const newPrice = update.price;
-
-        priceEl.textContent = `$${newPrice.toFixed(2)}`;
-
-        // Add visual feedback for price change
-        let priceClass = '';
-        if (!isNaN(oldPrice) && oldPrice > 0) {
-          if (newPrice > oldPrice) {
-            priceClass = 'price-up';
-          } else if (newPrice < oldPrice) {
-            priceClass = 'price-down';
-          }
-        }
-
-        if (priceClass) {
-          tickerItem.classList.add(priceClass);
-          setTimeout(() => tickerItem.classList.remove(priceClass), 750);
-        }
-      }
-    });
-
-    const now = new Date();
-    lastUpdatedTimestampEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
-
-  } catch (e) {
-    // Silently ignore parsing errors, as they are likely from other messages
-    // not intended for this handler.
-  }
-}
-
-/**
- * Adds a ticker to the real-time tracking tape.
- * @param ticker The stock ticker symbol to add.
- */
-async function addTickerToTape(ticker: string) {
-  if (trackedTickers.has(ticker)) return;
-
-  // Add to map with a placeholder to prevent re-adding during async fetch
-  trackedTickers.set(ticker, -1);
-
-  const tickerItem = document.createElement('div');
-  tickerItem.className = 'ticker-item';
-  tickerItem.id = `ticker-${ticker}`;
-  tickerItem.innerHTML = `
-    <span class="ticker-symbol">${ticker}</span>
-    <span class="ticker-price">Loading...</span>
-  `;
-
-  if (tickerTapeEl.firstChild) {
-    tickerTapeEl.insertBefore(tickerItem, tickerTapeEl.firstChild);
-  } else {
-    tickerTapeEl.appendChild(tickerItem);
-  }
-
-  const price = await fetchRealPrice(ticker);
-
-  if (price !== null) {
-    trackedTickers.set(ticker, price);
-    const event = new MessageEvent('message', {
-      data: JSON.stringify([{ ticker, price }]),
-    });
-    window.dispatchEvent(event);
-
-    // If the market is open, add the new ticker to the update queue
-    if (isMarketOpen() && !updateQueue.includes(ticker)) {
-      updateQueue.push(ticker);
-      // Ensure the loop is running
-      priceUpdateLoop();
-    }
-  } else {
-    // If fetching fails, show an error and remove it from tracking
-    const priceEl = tickerItem.querySelector('.ticker-price');
-    if (priceEl) {
-      priceEl.textContent = 'N/A';
-    }
-    trackedTickers.delete(ticker);
-  }
-}
-
-/**
- * Extracts and tracks tickers from a user's prompt.
- * @param prompt The user's input string.
- */
-function trackTickersFromPrompt(prompt: string) {
-  // Regex to find potential stock tickers (1-5 uppercase letters)
-  const tickerRegex = /\b[A-Z]{1,5}\b/g;
-  const tickers = prompt.match(tickerRegex);
-  if (tickers) {
-    tickers.forEach(ticker => addTickerToTape(ticker));
   }
 }
 
@@ -1088,7 +753,6 @@ async function handleFormSubmit(e: Event) {
   promptInputEl.value = '';
 
   addToHistory(prompt);
-  trackTickersFromPrompt(prompt);
 
   const userMessageHtml = await marked.parse(prompt);
   displayMessage(userMessageHtml, 'user', true);
@@ -1177,16 +841,8 @@ function main() {
   renderHistory();
   renderFavorites();
 
-  // Initialize WebSocket connection and event listener
-  window.addEventListener('message', handleWebSocketMessage);
-  
-  // Set up market status checker to run periodically
-  manageTickerUpdates();
-  setInterval(manageTickerUpdates, 60000); // Check every minute
-  
   chatFormEl.addEventListener('submit', handleFormSubmit);
   clearButtonEl.addEventListener('click', clearChat);
-  refreshTickerButtonEl.addEventListener('click', fetchAllTrackedPrices);
   historyToggleEl.addEventListener('click', () => {
     appWrapperEl.classList.toggle('history-open');
   });
